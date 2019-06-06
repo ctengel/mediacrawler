@@ -1,0 +1,4 @@
+
+{% for post in imgurl %}
+<a href="{{ post['m.url'] }}">{{ post['g.name'] }}<br/><img src="{{ post['j.url'] }}" height="90" width="160"/></a><br/><br/>
+{% endfor %}
