@@ -1,6 +1,7 @@
 
 """Simple tools for dealing with URL trees"""
 
+
 class URL:
     """URL class"""
     # stringout
