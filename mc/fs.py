@@ -10,7 +10,9 @@ import uuid
 import json
 import warnings
 import hashlib
+import imghdr
 import magic
+import exifread
 
 BUF = 1024 * 1024
 
@@ -88,7 +90,7 @@ class File:
     def sha256sum(path):
         """Get SHA256 of given path"""
         sha = hashlib.sha256()
-        with open(path, 'rb') as flh:  # TODO use Path method
+        with path.open('rb') as flh:
             while True:
                 data = flh.read(BUF)
                 if not data:
@@ -172,6 +174,44 @@ class Image(File):
     file_type = 'image'
     mimepre = 'image/'
 
+    @staticmethod
+    def read_exif(path):
+        """Given a path, read EXIF data"""
+        with path.open('rb') as flh:
+            exifo = exifread.process_file(flh)
+        # Here we remove the thumbnail since it gets huge otherwise
+        if exifo.get('JPEGThumbnail'):
+            exifo['JPEGThumbnail'] = True
+        else:
+            exifo['JPEGThumbnail'] = False
+        return exifo
+
+    def type_init(self):
+        self.exif = None
+        self.camera = None
+        self.resolution = None
+        self.orientation = None
+        # TODO look for EXIF-type stuff for non JPEG?
+        if imghdr.what(self.path) != 'jpeg':
+            return
+        self.exif = self.read_exif(self.path)
+        self.camera = (self.exif.get('Image Make'), self.exif.get('Image Model'))
+        try:
+            self.resolution = (int(str(self.exif.get('EXIF ExifImageWidth'))),
+                               int(str(self.exif.get('EXIF ExifImageLength'))))
+        except ValueError:
+            self.resolution = None
+        # TODO do fun stuff with mtime, etc - see #17
+        self.orientation = self.exif.get('Image Orientation') # TODO any better way to process this?
+
+    def asdict(self):
+        base = super().asdict()
+        # NOTE we intentionally remove exif to save space and just put derived info
+        base['camera'] = self.camera
+        base['resolution'] = self.resolution # NOTE this is just from EXIF
+        base['orientation'] = self.orientation
+        return base
+
 
 class Audio(File):
     """Audio file, with ID3, etc"""
@@ -242,7 +282,7 @@ class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, (DirTree, File)):
             return o.asdict()
-        if isinstance(o, (Path, uuid.UUID)):
+        if isinstance(o, (Path, uuid.UUID, exifread.classes.IfdTag, bytes)):
             return str(o)
         return super().default(o)
 
